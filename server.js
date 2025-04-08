@@ -10,7 +10,7 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 // Python server'ına bağlan (Railway adresi)
-const pythonSocket = socketClient('https://senin-railway-python-sunucun.up.railway.app'); // <-- BURAYI Python sunucu adresinle değiştir
+const pythonSocket = socketClient('remote-control-remote-control.up.railway.app'); // <-- BURAYI Python sunucu adresinle değiştir
 
 // Server'ı başlat
 server.listen(process.env.PORT || 3000, () => {
