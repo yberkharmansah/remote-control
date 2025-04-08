@@ -2,44 +2,76 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const socketClient = require('socket.io-client');  // Python sunucusuna bağlanmak için client ekliyoruz
 
 // Express uygulaması oluştur
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-// Python server'ına bağlan (Railway adresi)
-const pythonSocket = socketClient('https://remote-control-remote-control.up.railway.app'); // <-- BURAYI Python sunucu adresinle değiştir
+// Python client'ına data göndermek için global socketler listesi
+const pythonClients = new Set();
+
+// Ana sayfa için basit bir route
+app.get('/', (req, res) => {
+  res.send('Remote Control Server Running');
+});
 
 // Server'ı başlat
 server.listen(process.env.PORT || 3000, () => {
-  console.log('Server is running');
+  console.log(`Server is running on port ${process.env.PORT || 3000}`);
 });
 
 // Flutter'dan gelen WebSocket bağlantılarını dinle
 io.on('connection', (socket) => {
-  console.log('A user connected');
+  console.log('A client connected:', socket.id);
+  
+  // Python istemcisi mi kontrol et
+  socket.on('register_python_client', () => {
+    console.log('Python client registered:', socket.id);
+    pythonClients.add(socket.id);
+  });
 
   // Klavye tuşları geldiğinde
   socket.on('keyboard', (data) => {
     console.log('Key pressed:', data.key);
-    pythonSocket.emit('keyboard', { key: data.key });  // Python sunucuya gönder
+    // Tüm Python clientlara ilet
+    pythonClients.forEach(clientId => {
+      if (clientId !== socket.id) {
+        io.to(clientId).emit('keyboard', data);
+      }
+    });
   });
 
-  // Mouse hareketleri geldiğinde
-  socket.on('mousemove', (data) => {
+  // Mouse hareketleri geldiğinde - hem 'mousemove' hem de 'mouse_move' eventlerini dinle
+  socket.on('mouse_move', (data) => {
     console.log('Mouse moved:', data);
-    pythonSocket.emit('mousemove', data);  // Python sunucuya gönder
+    // Tüm Python clientlara ilet
+    pythonClients.forEach(clientId => {
+      if (clientId !== socket.id) {
+        io.to(clientId).emit('mouse_move', data);
+      }
+    });
   });
 
-  // Mouse tıklaması geldiğinde (isteğe bağlı)
+  // Mouse tıklaması geldiğinde
   socket.on('mouse_click', (data) => {
     console.log('Mouse clicked:', data);
-    pythonSocket.emit('mouse_click', data);
+    // Tüm Python clientlara ilet
+    pythonClients.forEach(clientId => {
+      if (clientId !== socket.id) {
+        io.to(clientId).emit('mouse_click', data);
+      }
+    });
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected');
+    console.log('Client disconnected:', socket.id);
+    // Python client listesinden çıkar
+    pythonClients.delete(socket.id);
   });
 });
