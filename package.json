@@ -1,0 +1,19 @@
+{
+    "name": "remote-control-server",
+    "version": "1.0.0",
+    "description": "Node.js server for controlling the computer remotely",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "express": "^4.17.1",
+      "http": "0.0.1",
+      "socket.io": "^4.0.0",
+      "socket.io-client": "^4.0.0"
+    },
+    "engines": {
+      "node": "16.x"
+    }
+  }
+  
