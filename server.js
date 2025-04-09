@@ -1,80 +1,81 @@
-// Memory optimizasyonu (Railway 512MB limiti için)
+// Bellek optimizasyonu (Render Free Tier için)
 require('v8').setFlagsFromString('--max-old-space-size=512');
 
-// Temel modüller
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 
-// Express uygulaması
+// Sabit config (Render özel)
+const CONFIG = {
+  PORT: 10000, // Render'ın zorunlu portu
+  ALLOWED_ORIGINS: ["https://remote-control-565f.onrender.com", "http://localhost"],
+  SOCKET_OPTS: {
+    pingTimeout: 60000,
+    pingInterval: 25000
+  }
+};
+
+// Express setup
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: CONFIG.ALLOWED_ORIGINS,
+  methods: ["GET", "POST"]
+}));
 
-// HTTP sunucusu
+// HTTP server
 const server = http.createServer(app);
-const PORT = process.env.PORT || 3000;
 
-// Socket.IO yapılandırması (Railway için optimize edilmiş)
+// Socket.IO setup
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    transports: ['websocket', 'polling'],
-    credentials: true
+    origin: CONFIG.ALLOWED_ORIGINS,
+    methods: ["GET", "POST"]
   },
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2 dakika
-    skipMiddlewares: true
-  }
+  ...CONFIG.SOCKET_OPTS
 });
 
-// İstemci yönetimi
+// Client tracking
 const clients = {
   flutter: new Set(),
   python: new Set()
 };
 
-// Socket.IO bağlantı yönetimi
+// Socket.IO events
 io.on('connection', (socket) => {
-  console.log(`🟢 Yeni bağlantı: ${socket.id}`);
+  console.log(`[${new Date().toISOString()}] 🔗 New connection: ${socket.id}`);
 
-  // İstemci kaydı
+  // Client registration
   socket.on('register_client', (clientType) => {
-    const pool = clientType === 'python' ? clients.python : clients.flutter;
+    const pool = clients[clientType] || clients.flutter;
     pool.add(socket.id);
-    console.log(`📌 ${clientType.toUpperCase()} istemcisi kaydedildi (${pool.size} aktif)`);
+    console.log(`📌 Registered ${clientType} client (Total: ${pool.size})`);
   });
 
-  // Olay yönlendirici
-  const forwardEvent = (eventName) => {
-    socket.on(eventName, (data) => {
-      if (!clients.python.size) {
-        console.warn(`⚠️ Python istemcisi bağlı değil (${eventName} eventi)`);
-        return;
-      }
-      clients.python.forEach(clientId => {
-        io.to(clientId).emit(eventName, data);
+  // Event forwarding
+  const forwardEvent = (event) => {
+    socket.on(event, (data) => {
+      clients.python.forEach(client => {
+        io.to(client).emit(event, data);
       });
     });
   };
 
-  // Desteklenen eventler
   ['keyboard', 'mouse_move', 'mouse_click'].forEach(forwardEvent);
 
-  // Bağlantı kesilirse
+  // Cleanup
   socket.on('disconnect', () => {
     clients.python.delete(socket.id);
     clients.flutter.delete(socket.id);
-    console.log(`🔴 Bağlantı kesildi: ${socket.id}`);
+    console.log(`❌ Disconnected: ${socket.id}`);
   });
 });
 
-// Health check endpoint (Railway için zorunlu)
+// Health check (Render için zorunlu)
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
+  res.json({
+    status: 'UP',
+    timestamp: new Date().toISOString(),
     clients: {
       flutter: clients.flutter.size,
       python: clients.python.size
@@ -82,26 +83,32 @@ app.get('/health', (req, res) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).send('Not Found');
+// Root endpoint
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>Remote Control Server</h1>
+    <p>Status: <span style="color:green">Running</span></p>
+    <p>Socket.IO: <code>/socket.io/</code></p>
+    <p>Health Check: <a href="/health">/health</a></p>
+  `);
 });
 
-// Sunucuyu başlat
-server.listen(PORT, () => {
+// Start server
+server.listen(CONFIG.PORT, () => {
   console.log(`
   ********************************************
-  🚀 Server ${process.env.NODE_ENV || 'development'} modunda
-  🚪 Port: ${PORT}
-  📅 ${new Date().toLocaleString()}
+  🚀 Server running on port ${CONFIG.PORT}
+  🌐 Web Interface: http://localhost:${CONFIG.PORT}
+  🕒 Started at: ${new Date().toISOString()}
   ********************************************
   `);
 });
 
-// Process killer handler (Railway SIGTERM için)
+// Render-specific shutdown handling
 process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM alındı, sunucu kapatılıyor...');
+  console.log('🛑 SIGTERM received, shutting down gracefully...');
   server.close(() => {
+    console.log('Server closed');
     process.exit(0);
   });
 });

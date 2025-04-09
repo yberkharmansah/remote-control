@@ -1,14 +1,11 @@
 {
-  "name": "remote-control-server",
+  "name": "remote-control-render",
   "version": "1.0.0",
-  "description": "Socket.IO server for remote keyboard/mouse control",
+  "description": "Render için Socket.IO sunucusu",
   "main": "server.js",
   "scripts": {
-    "preinstall": "npm cache clean --force",
-    "install": "npm install --omit=dev",
-    "start": "NODE_ENV=production node --max-old-space-size=512 server.js",
-    "dev": "nodemon server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node --max-old-space-size=512 server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -16,10 +13,6 @@
     "cors": "^2.8.5"
   },
   "engines": {
-    "node": "18.x",
-    "npm": "9.x"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "node": "18.x"
+  }
 }
