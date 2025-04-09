@@ -3,128 +3,66 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 
-// Express uygulaması oluştur
+// 1. Express ve HTTP sunucusu
 const app = express();
 app.use(cors());
-
-// HTTP sunucusu
 const server = http.createServer(app);
+const PORT = 3000; // Sabit port
 
-// Socket.IO yapılandırması
+// 2. Socket.IO yapılandırması
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["my-custom-header"],
-    credentials: true
-  },
-  pingInterval: 10000,
-  pingTimeout: 5000
+    origin: "*", // Tüm originlere izin ver
+    methods: ["GET", "POST"]
+  }
 });
 
-// İstemci yönetimi
+// 3. İstemci takibi
 const clients = {
   flutter: new Set(),
   python: new Set()
 };
 
-// Debug için renkli loglar
-const colors = {
-  reset: "\x1b[0m",
-  python: "\x1b[36m", // Cyan
-  flutter: "\x1b[33m", // Yellow
-  system: "\x1b[35m" // Magenta
-};
-
-function logClient(type, message) {
-  console.log(`${colors[type]}${type.toUpperCase()}${colors.reset}: ${message}`);
-}
-
-// Bağlantı yönetimi
+// 4. Socket.IO olayları
 io.on('connection', (socket) => {
-  logClient('system', `Yeni bağlantı: ${socket.id}`);
+  console.log('⚡ Yeni bağlantı:', socket.id);
 
-  // İstemci türünü belirleme
+  // İstemci kaydı
   socket.on('register_client', (clientType) => {
-    if (clientType === 'python') {
-      clients.python.add(socket.id);
-      logClient('python', `Kayıtlı Python istemcisi: ${socket.id}`);
-    } else {
-      clients.flutter.add(socket.id);
-      logClient('flutter', `Kayıtlı Flutter istemcisi: ${socket.id}`);
-    }
-    
-    // Tüm istemcileri logla
-    logClient('system', `Aktif istemciler - Flutter: ${clients.flutter.size} | Python: ${clients.python.size}`);
+    const pool = clientType === 'python' ? clients.python : clients.flutter;
+    pool.add(socket.id);
+    console.log(`📌 ${clientType} istemcisi kaydedildi (Toplam: ${pool.size})`);
   });
 
-  // Klavye olayları
-  socket.on('keyboard', (data) => {
-    if (!data.key) {
-      logClient('system', `Geçersiz klavye verisi: ${JSON.stringify(data)}`);
-      return;
-    }
-
-    logClient('flutter', `Tuş basımı: ${data.key}`);
-    
-    // Python istemcilerine ilet
-    clients.python.forEach(clientId => {
-      io.to(clientId).emit('keyboard', data);
+  // Olay yönlendirme
+  const forwardEvent = (eventName) => {
+    socket.on(eventName, (data) => {
+      clients.python.forEach(clientId => {
+        io.to(clientId).emit(eventName, data);
+      });
     });
-  });
+  };
 
-  // Mouse hareketleri
-  socket.on('mouse_move', (data) => {
-    if (typeof data.dx !== 'number' || typeof data.dy !== 'number') {
-      logClient('system', `Geçersiz mouse hareketi: ${JSON.stringify(data)}`);
-      return;
-    }
-
-    logClient('flutter', `Mouse hareketi: dx=${data.dx}, dy=${data.dy}`);
-    
-    clients.python.forEach(clientId => {
-      io.to(clientId).emit('mouse_move', data);
-    });
-  });
-
-  // Mouse tıklaması
-  socket.on('mouse_click', (data) => {
-    logClient('flutter', `Mouse tıklandı: ${JSON.stringify(data)}`);
-    
-    clients.python.forEach(clientId => {
-      io.to(clientId).emit('mouse_click', data);
-    });
-  });
+  ['keyboard', 'mouse_move', 'mouse_click'].forEach(forwardEvent);
 
   // Bağlantı kesilirse
   socket.on('disconnect', () => {
-    if (clients.python.has(socket.id)) {
-      clients.python.delete(socket.id);
-      logClient('python', `Bağlantı kesildi: ${socket.id}`);
-    } else if (clients.flutter.has(socket.id)) {
-      clients.flutter.delete(socket.id);
-      logClient('flutter', `Bağlantı kesildi: ${socket.id}`);
-    }
-    
-    logClient('system', `Kalan istemciler - Flutter: ${clients.flutter.size} | Python: ${clients.python.size}`);
+    clients.python.delete(socket.id);
+    clients.flutter.delete(socket.id);
+    console.log('❌ Bağlantı kesildi:', socket.id);
   });
 });
 
-// HTTP endpoint'i (sağlık kontrolü)
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'online',
-    clients: {
-      flutter: clients.flutter.size,
-      python: clients.python.size
-    }
-  });
+// 5. Test endpoint'i
+app.get('/ping', (req, res) => {
+  res.send('🏓 Pong!');
 });
 
-// Sunucuyu başlat
-const PORT = process.env.PORT || 3000;
+// 6. Sunucuyu başlat
 server.listen(PORT, () => {
-  console.log(`\n${colors.system}### Uzaktan Kontrol Sunucusu ###${colors.reset}`);
-  console.log(`Sunucu çalışıyor: http://localhost:${PORT}`);
-  console.log(`Socket.IO endpoint: ws://localhost:${PORT}/socket.io/\n`);
+  console.log(`
+  ************************************
+  🚀 Server http://localhost:${PORT} adresinde
+  ************************************
+  `);
 });
